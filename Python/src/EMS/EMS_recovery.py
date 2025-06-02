@@ -62,7 +62,7 @@ def EMS_recovery(
     # initialize EMS
     x = x0
     cost = 0.0
-    num_switch = np.int(0)
+    num_switch = int(0)
     p = np.ones(point.shape[0])
 
     # ---------------------------------------EMS ALGORITHM--------------------------------------------
