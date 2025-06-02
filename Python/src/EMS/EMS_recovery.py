@@ -90,7 +90,13 @@ def EMS_recovery(
         cost_n = 2 * optfunc.cost
 
         # update sigma
-        sigma2_n = cost_n / (3 * np.sum(p))       
+        effective_points = np.sum(p)
+        if effective_points > 0:
+            sigma2_n = cost_n / (3 * effective_points)
+            # Prevent sigma from becoming too small or too large
+            sigma2_n = np.clip(sigma2_n, 1e-6, V**(1/3) / 2)
+        else:
+            sigma2_n = sigma2 * 0.9  # Gradual reduction if no effective points     
 
         # evaluate raletive decreasing of cost
         relative_cost = (cost - cost_n) / cost_n
@@ -137,20 +143,43 @@ def EMS_recovery(
 # ---------------------------------------UTILITIES-------------------------------------------
 @njit(cache=True)
 def SimilarityCandidates(x):
-    # axis mismatch similarity
+    # # axis mismatch similarity
+    # axis_0 = Euler2RotM(x[5: 8])
+    # axis_1 = axis_0[:, np.array([1, 2, 0])]
+    # axis_2 = axis_0[:, np.array([2, 0, 1])]
+    # eul_1 = RotM2Euler(axis_1)
+    # eul_2 = RotM2Euler(axis_2)
+    # x_axis = np.array(
+    #     [[x[1], x[0], x[3], x[4], x[2], eul_1[0], eul_1[1], eul_1[2], x[8], x[9], x[10]],
+    #      [x[1], x[0], x[4], x[2], x[3], eul_2[0], eul_2[1], eul_2[2], x[8], x[9], x[10]]]
+    # )   
+
+    # # duality similarities
+    # scale_ratio = x[np.array([3, 4, 2])] / x[2 : 5]
+    # scale_idx = np.argwhere(np.logical_and(scale_ratio > 0.6, scale_ratio < 1.4))
+    
     axis_0 = Euler2RotM(x[5: 8])
     axis_1 = axis_0[:, np.array([1, 2, 0])]
     axis_2 = axis_0[:, np.array([2, 0, 1])]
     eul_1 = RotM2Euler(axis_1)
     eul_2 = RotM2Euler(axis_2)
-    x_axis = np.array(
-        [[x[1], x[0], x[3], x[4], x[2], eul_1[0], eul_1[1], eul_1[2], x[8], x[9], x[10]],
-         [x[1], x[0], x[4], x[2], x[3], eul_2[0], eul_2[1], eul_2[2], x[8], x[9], x[10]]]
-    )   
-
-    # duality similarities
-    scale_ratio = x[np.array([3, 4, 2])] / x[2 : 5]
-    scale_idx = np.argwhere(np.logical_and(scale_ratio > 0.6, scale_ratio < 1.4))
+    
+    # Only consider axis switches if scales are reasonably similar
+    scale_similarity_threshold = 0.7
+    x_axis = np.zeros((0, 11))
+    
+    if abs(x[2] - x[3]) / max(x[2], x[3]) < (1 - scale_similarity_threshold):
+        candidate_1 = np.array([x[1], x[0], x[3], x[4], x[2], eul_1[0], eul_1[1], eul_1[2], x[8], x[9], x[10]])
+        x_axis = np.vstack([x_axis, candidate_1.reshape(1, -1)])
+    
+    if abs(x[2] - x[4]) / max(x[2], x[4]) < (1 - scale_similarity_threshold):
+        candidate_2 = np.array([x[1], x[0], x[4], x[2], x[3], eul_2[0], eul_2[1], eul_2[2], x[8], x[9], x[10]])
+        x_axis = np.vstack([x_axis, candidate_2.reshape(1, -1)])
+    
+    # More conservative duality candidates
+    scale_ratio = x[np.array([3, 4, 2])] / x[2:5]
+    scale_idx = np.argwhere(np.logical_and(scale_ratio > 0.8, scale_ratio < 1.25))  # Tighter range
+    
     x_rot = np.zeros((scale_idx.shape[0], 11))
     
     for idx in range(scale_idx.shape[0]):
@@ -284,41 +313,118 @@ def BoundVolume(point):
     return V
 
 @njit(cache=True)
+# def Distance(point, x):
+#     # approximate the distance from a point to its nearest point on the superquadric surface
+#     # extract transformation from superquadric parameters
+#     R = Euler2RotM(x[5: 8])
+#     t = x[8: 11]
+
+#     # transform to the canonical frame
+#     point_c = point @ R - t @ R
+
+#     # calculating radial distance
+#     # r_norm = np.linalg.norm(point_c, axis=1)
+#     r_norm = np.sqrt(np.sum(point_c ** 2, 1))
+        
+#     dist = r_norm * np.abs((
+#         (((point_c[:, 0] / x[2]) ** 2) ** (1 / x[1]) +
+#         ((point_c[:, 1] / x[3]) ** 2) ** (1 / x[1])) ** (x[1] / x[0]) +
+#         ((point_c[:, 2] / x[4]) ** 2) ** (1 / x[0])) ** (-x[0] / 2) - 1
+#     )
+#     return dist
+
+@njit(cache=True)
 def Distance(point, x):
-    # approximate the distance from a point to its nearest point on the superquadric surface
-    # extract transformation from superquadric parameters
     R = Euler2RotM(x[5: 8])
     t = x[8: 11]
-
-    # transform to the canonical frame
     point_c = point @ R - t @ R
 
-    # calculating radial distance
-    # r_norm = np.linalg.norm(point_c, axis=1)
     r_norm = np.sqrt(np.sum(point_c ** 2, 1))
     
-    dist = r_norm * np.abs((
-        (((point_c[:, 0] / x[2]) ** 2) ** (1 / x[1]) +
-         ((point_c[:, 1] / x[3]) ** 2) ** (1 / x[1])) ** (x[1] / x[0]) +
-        ((point_c[:, 2] / x[4]) ** 2) ** (1 / x[0])) ** (-x[0] / 2) - 1
-    )
+    # Add numerical stability
+    eps = 1e-12
+    x2_safe = np.maximum(x[2], eps)
+    x3_safe = np.maximum(x[3], eps)
+    x4_safe = np.maximum(x[4], eps)
+    
+    # Clamp shape parameters to prevent numerical issues
+    x0_clamped = np.clip(x[0], 0.1, 2.0)
+    x1_clamped = np.clip(x[1], 0.1, 2.0)
+    
+    # More stable power calculations
+    term1 = np.abs(point_c[:, 0] / x2_safe) ** (2.0 / x1_clamped)
+    term2 = np.abs(point_c[:, 1] / x3_safe) ** (2.0 / x1_clamped)
+    term3 = np.abs(point_c[:, 2] / x4_safe) ** (2.0 / x0_clamped)
+    
+    # Avoid numerical overflow in intermediate calculations
+    inner_sum = np.clip(term1 + term2, eps, 1e10)
+    middle_term = inner_sum ** (x1_clamped / x0_clamped)
+    outer_sum = np.clip(middle_term + term3, eps, 1e10)
+    
+    # More accurate distance calculation
+    surface_func = outer_sum ** (-x0_clamped / 2.0)
+    
+    # Use signed distance for better fitting
+    dist = r_norm * np.abs(surface_func - 1.0)
+    
     return dist
+
+# @njit(cache=True)
+# def CostFunc(x, point, p, sigma2):
+#     if sigma2 > 1e-10:
+#         value = p ** 0.5 * Distance(point, x)
+#     else:
+#         value = np.abs((p * Distance(point, x) ** 2 + 2 *
+#                        sigma2 * np.log(SurfaceArea(x)))) ** 0.5
+#     return value
 
 @njit(cache=True)
 def CostFunc(x, point, p, sigma2):
+    base_cost = p ** 0.5 * Distance(point, x)
+    
+    # Add shape regularization within existing framework
     if sigma2 > 1e-10:
-        value = p ** 0.5 * Distance(point, x)
+        # Prevent extreme aspect ratios
+        scale_penalty = 0.0
+        scales = x[2:5]
+        max_ratio = np.max(scales) / np.min(scales)
+        if max_ratio > 5.0:
+            scale_penalty = (max_ratio - 5.0) * 0.1
+        
+        # Prefer stable shape parameters
+        shape_penalty = 0.0
+        if x[0] < 0.3 or x[0] > 1.7:
+            shape_penalty += 0.05 * abs(x[0] - 1.0)
+        if x[1] < 0.3 or x[1] > 1.7:
+            shape_penalty += 0.05 * abs(x[1] - 1.0)
+        
+        total_penalty = scale_penalty + shape_penalty
+        value = base_cost + total_penalty
     else:
-        value = np.abs((p * Distance(point, x) ** 2 + 2 *
-                       sigma2 * np.log(SurfaceArea(x)))) ** 0.5
+        value = np.abs((p * Distance(point, x) ** 2 + 2 * sigma2 * np.log(SurfaceArea(x)))) ** 0.5
+    
     return value
 
 @njit(cache=True)
 def OutlierProb(dist, sigma2, w, p0):
     c = (2 * np.pi * sigma2) ** (- 3 / 2)
     const = (w * p0) / (c * (1 - w))
-    p = np.exp(-1 / (2 * sigma2) * dist ** 2)
+    
+    # Use adaptive threshold based on distance distribution
+    median_dist = np.median(dist)
+    robust_scale = np.median(np.abs(dist - median_dist)) * 1.4826
+    adaptive_threshold = median_dist + 2.0 * robust_scale
+    
+    # Modify probabilities based on adaptive threshold
+    adjusted_dist = np.where(dist > adaptive_threshold, 
+                            dist * 1.5,  # Penalize extreme outliers more
+                            dist)
+    
+    # More stable exponential calculation
+    exp_term = np.clip(-adjusted_dist ** 2 / (2 * sigma2), -50, 0)
+    p = np.exp(exp_term)
     p = p / (const + p)
+    
     return p
 
 @njit(cache=True)
