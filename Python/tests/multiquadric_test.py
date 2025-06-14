@@ -3,94 +3,106 @@ from EMS.EMS_recovery import EMS_recovery
 from EMS.utilities import read_ply, showPoints
 from mayavi import mlab
 from sklearn.cluster import DBSCAN
-from collections import defaultdict
-
+from sklearn.decomposition import PCA
 
 def hierarchical_ems(
-    points,
-    outlier_ratio=0.9,
-    max_em_iterations=20,
-    em_tolerance=1e-3,
-    em_relative_tolerance=2e-1,
-    max_optimization_iterations=2,
-    sigma=0.3,
-    max_switches=2,
-    adaptive_upper_bound=True,
-    rescale=False,
-    max_depth=5,
-    dbscan_eps=1.7,
-    dbscan_min_points=60,
-    inlier_threshold=0.1,
-    min_inlier_ratio=0.8
+    point, 
+    OutlierRatio=0.9,
+    MaxIterationEM=20,
+    ToleranceEM=1e-3,
+    RelativeToleranceEM=2e-1,
+    MaxOptiIterations=2,
+    Sigma=0.3,
+    MaxiSwitch=2,
+    AdaptiveUpperBound=True,
+    Rescale=False,
+    MaxLayer=5,
+    Eps=2.25,
+    MinPoints=120,
+    OutlierThreshold=0.045,
+    MinOutlierRatio=0.135,
 ):
-    segments = defaultdict(list)
-    outliers = defaultdict(list)
-    segments[0] = [points]
-    quadrics = []
+    point_seg = {i: [] for i in range(MaxLayer + 1)}
+    point_outlier = {i: [] for i in range(MaxLayer + 1)}
+    point_seg[0] = [point]
+    list_quadrics = []
     
-    for depth in range(max_depth):
-        if not segments[depth]:
-            break
+    ems_params = (OutlierRatio, MaxIterationEM, ToleranceEM, RelativeToleranceEM,
+                  MaxOptiIterations, Sigma, MaxiSwitch, AdaptiveUpperBound, Rescale)
+    
+    for layer in range(MaxLayer):
+        for segment_idx in range(len(point_seg[layer])):
+            current_points = point_seg[layer][segment_idx]
             
-        for segment in segments[depth]:
-            quadric, probabilities = EMS_recovery(
-                segment,
-                outlier_ratio,
-                max_em_iterations,
-                em_tolerance,
-                em_relative_tolerance,
-                max_optimization_iterations,
-                sigma,
-                max_switches,
-                adaptive_upper_bound,
-                rescale
-            )
-            
-            quadrics.append(quadric)
-            
-            inlier_mask = probabilities > inlier_threshold
-            outlier_mask = ~inlier_mask
-            
-            segment_outliers = segment[outlier_mask]
-            
-            if probabilities.sum() < min_inlier_ratio * len(segment):
-                clusters = DBSCAN(eps=dbscan_eps, min_samples=dbscan_min_points).fit(segment_outliers)
-                unique_labels = set(clusters.labels_) - {-1}
+            if len(current_points) < MinPoints:
+                continue
                 
-                for label in unique_labels:
-                    cluster_points = segment_outliers[clusters.labels_ == label]
-                    segments[depth + 1].append(cluster_points)
+            try:
+                x_raw, p_raw = EMS_recovery(current_points, *ems_params)
+                list_quadrics.append(x_raw)
                 
-                noise_points = segment_outliers[clusters.labels_ == -1]
-                if len(noise_points) > 0:
-                    outliers[depth].append(noise_points)
-            elif len(segment_outliers) > 0:
-                outliers[depth].append(segment_outliers)
+                inlier_mask = p_raw > OutlierThreshold
+                inliers = current_points[inlier_mask]
+                outliers = current_points[~inlier_mask]
+                
+                if len(inliers) > 0:
+                    point_seg[layer][segment_idx] = inliers
+                
+                outlier_ratio = len(outliers) / len(current_points)
+                if len(outliers) > MinPoints and outlier_ratio > MinOutlierRatio:
+                    if should_segment_outliers(outliers, Eps, MinPoints):
+                        segments = cluster_points(outliers, Eps, MinPoints)
+                        point_seg[layer + 1].extend(segments)
+                    else:
+                        point_outlier[layer].append(outliers)
+                        
+            except Exception as e:
+                print(f"Failed to fit quadric: {e}")
+                if layer < MaxLayer - 1:
+                    point_seg[layer + 1].append(current_points)
     
-    return dict(segments), dict(outliers), quadrics
+    return point_seg, point_outlier, list_quadrics
+
+def should_segment_outliers(outliers, eps, min_points):
+    if len(outliers) < min_points * 2:
+        return False
+    
+    pca = PCA(n_components=3)
+    pca.fit(outliers)
+    variance_ratio = pca.explained_variance_ratio_[0]
+    
+    return variance_ratio < 0.88
+
+def cluster_points(points, eps, min_points):
+    clustering = DBSCAN(eps=eps, min_samples=min_points).fit(points)
+    labels = clustering.labels_
+    
+    segments = []
+    for label in set(labels):
+        if label == -1:
+            continue
+        cluster = points[labels == label]
+        if len(cluster) >= min_points:
+            segments.append(cluster)
+    
+    noise = points[labels == -1]
+    if len(noise) >= min_points:
+        segments.append(noise)
+    
+    return segments if segments else [points]
 
 
-def visualize_quadrics(quadrics, point_cloud, arclength=0.2, point_scale=0.001):
-    fig = mlab.figure(size=(400, 400), bgcolor=(1, 1, 1))
-    
-    for quadric in quadrics:
-        quadric.showSuperquadric(arclength=arclength)
-    
-    showPoints(point_cloud, scale_factor=point_scale)
-    mlab.show()
-    
-    return fig
+point_cloud = read_ply("sphere.ply")
+point_seg, point_outlier, list_quadrics = hierarchical_ems(
+    point_cloud,
+    OutlierThreshold=0.045,
+    MinOutlierRatio=0.135,
+    MinPoints=120,
+    Eps=2.25
+)
 
-
-if __name__ == "__main__":
-    point_cloud = read_ply("beer_bottle.ply")
-    
-    segments, outliers, quadrics = hierarchical_ems(
-        point_cloud,
-        dbscan_eps=1.7,
-        dbscan_min_points=60
-    )
-    
-    print(f"Generated {len(quadrics)} quadrics across {len(segments)} layers")
-    
-    visualize_quadrics(quadrics, point_cloud)
+fig = mlab.figure(size=(400, 400), bgcolor=(1, 1, 1))
+for quadric in list_quadrics:
+    quadric.showSuperquadric(arclength=0.2)
+showPoints(point_cloud, scale_factor=0.1)
+mlab.show()
