@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>[Enhanced Multi-Superquadric Recovery Through Improved EMS Algorithm with Adaptive Clustering]</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 40px;
+            background-color: #f9f9f9;
+            color: #333;
+        }
+        h1, h2 {
+            color: #2c3e50;
+        }
+        img {
+            max-width: 600px;
+            margin: 10px 0;
+        }
+        a {
+            color: #1e90ff;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Enhanced Multi-Superquadric Recovery Through Improved EMS Algorithm with Adaptive Clustering</h1>
+
+    <h2>Group Members</h2>
+    <ul>
+        <li>Jiacheng Wang</li>
+        <li>Weikeng Yang</li>
+        <li>Bruce Xu</li>
+        <li>Minhao Ren</li>
+        <!-- Add more as needed -->
+    </ul>
+
+    <h2>Abstract</h2>
+    <p>
+        This project presents significant improvements to the Expectation, Maximization, and Switching for Superquadrics (EMS)\cite{liu2022robust}
+ algorithm for recovering multiple superquadric surfaces from 3D point clouds. Our enhanced approach addresses key limitations in the original implementation through three main contributions: (1) adaptive outlier detection using Principal Component Analysis (PCA) for intelligent clustering decisions, (2) comprehensive numerical stability improvements preventing computational failures, and (3) refined parameter initialization strategies based on statistical analysis. Experimental results demonstrate that our modifications achieve more robust surface fitting, especially when multiquadric fitting is conducted. 
+    </p>
+
+    <h2>Project Report</h2>
+    <p><a href="project_report.pdf" target="_blank">Download the PDF report</a></p>
+
+    <h2>Images</h2>
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+        <div>
+            <img src="images/beer0.png" alt="Baseline" style="width: 100%;">
+            <p>Baseline</p>
+        </div>
+        <div>
+            <img src="images/beer1.png" alt="Adaptive Clustering (Ours)" style="width: 100%;">
+            <p>Adaptive Clustering (Ours)</p>
+        </div>
+        <div>
+            <img src="images/wide0.png" alt="Baseline" style="width: 100%;">
+            <p>Baseline</p>
+        </div>
+        <div>
+            <img src="images/wide1.png" alt="Adaptive Clustering (Ours)" style="width: 100%;">
+            <p>Adaptive Clustering (Ours)</p>
+        </div>
+    </div>
+    <p>Those are example images to show our model's performance compared to baseline EMS model.</p>
+
+    <h2>Source Code</h2>
+    <p>
+        <a href="https://github.com/ConstantineWang/multiquadric_noise_recovery/tree/dev/Python" target="_blank">GitHub Repository</a>
+    </p>
+
+</body>
+</html>
