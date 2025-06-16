@@ -4,6 +4,8 @@ from EMS.utilities import read_ply, showPoints
 from mayavi import mlab
 from sklearn.cluster import DBSCAN
 from sklearn.decomposition import PCA
+import argparse
+import sys
 
 def hierarchical_ems(
     point, 
@@ -91,18 +93,72 @@ def cluster_points(points, eps, min_points):
     
     return segments if segments else [points]
 
+def main(argv):
+    parser = argparse.ArgumentParser(
+        description='Hierarchical EMS: Probabilistic Recovery of multiple superquadric surfaces from a point cloud file (*.ply).'
+    )
 
-point_cloud = read_ply("sphere.ply")
-point_seg, point_outlier, list_quadrics = hierarchical_ems(
-    point_cloud,
-    OutlierThreshold=0.045,
-    MinOutlierRatio=0.135,
-    MinPoints=120,
-    Eps=2.25
-)
+    parser.add_argument(
+        'path_to_data',
+        help='Path to the point cloud file (*.ply).'
+    )
 
-fig = mlab.figure(size=(400, 400), bgcolor=(1, 1, 1))
-for quadric in list_quadrics:
-    quadric.showSuperquadric(arclength=0.2)
-showPoints(point_cloud, scale_factor=0.1)
-mlab.show()
+    parser.add_argument(
+        '--visualize',
+        action='store_true',
+        help='Visualize the recovered superquadrics and the input point cloud.'
+    )
+
+    parser.add_argument(
+        '--runtime',
+        action='store_true',
+        help='Show the runtime.'
+    )
+
+    parser.add_argument(
+        '--result',
+        action='store_true',       
+        help='Print the recovered superquadric parameters.'
+    )
+
+    args = parser.parse_args(argv)
+    
+    print('----------------------------------------------------')
+    print('Loading point cloud from: ', args.path_to_data, '...')
+    point_cloud = read_ply(args.path_to_data)
+    print('Point cloud loaded.')
+    print('----------------------------------------------------')
+
+    import timeit
+    start = timeit.default_timer()
+    point_seg, point_outlier, list_quadrics = hierarchical_ems(
+        point_cloud,
+        OutlierThreshold=0.045,
+        MinOutlierRatio=0.135,
+        MinPoints=120,
+        Eps=2.25
+    )
+    stop = timeit.default_timer()
+
+    if args.runtime:
+        print('Runtime: ', (stop - start) * 1000, 'ms')
+    print('----------------------------------------------------')
+
+    if args.result:
+        for i, quadric in enumerate(list_quadrics):
+            print(f'Quadric {i+1}:')
+            print('shape =', quadric.shape)
+            print('scale =', quadric.scale)
+            print('euler =', quadric.euler)
+            print('translation =', quadric.translation)
+            print('----------------------------------------------------')
+
+    if args.visualize:
+        fig = mlab.figure(size=(400, 400), bgcolor=(1, 1, 1))
+        for quadric in list_quadrics:
+            quadric.showSuperquadric(arclength=0.2)
+        showPoints(point_cloud, scale_factor=0.1)
+        mlab.show()
+
+if __name__ == "__main__":
+    main(sys.argv[1:])

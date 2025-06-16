@@ -22,7 +22,7 @@ def main(argv):
     parser.add_argument(
         '--visualize',
         action = 'store_true',
-        help='Visualize the recoverd superquadric and the input point cloud.'
+        help='Visualize the recovered superquadric and the input point cloud.'
     )
 
     parser.add_argument(
@@ -47,7 +47,7 @@ def main(argv):
     parser.add_argument(
         '--adaptiveUpperBound',
         action = 'store_true',       
-        help='Implemet addaptive upper bound to limit the volume of the superquadric.'
+        help='Implement adaptive upper bound to limit the volume of the superquadric.'
     )
 
     parser.add_argument(
