@@ -25,13 +25,13 @@ We recommend to install the EMS package with `pip`.
 2. Install package: `pip install .`
     
 
-### Run Demo
+### Run Demo (more info can be found on the root folder of the entire repo, such as comparison scripts, etc)
 
-The demo script is `/Python/tests/test_script.py`.
+The demo script is `/Python/tests/multiquadric_test.py`.
 The demo reads a `.ply` point cloud and returns the parameters of the recovered superquadric, runtime, and visualization as required.
 
-For example, in terminal type in
+For example, in terminal type in (you need to specify the .ply file inside tests/multiquadric_test.py
 
-     python test_script.py *.ply file location* --result --runtime --visualize
+     python -m pip install -e . && python tests/multiquadric_test.py --result --runtime --visualize
 
 Note the first run of the code takes longer, since the JIT will translate the Python and NumPy code into fast machine code (and will be cached for futher calls).
